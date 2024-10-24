@@ -1,4 +1,0 @@
-activity.csv: Means of travel and distance traveled and start end latitude and longitude
-timelineMemory.csv: Memory of long-distance travel records (We will not use that, not useful)
-timelinePath.csv: Location information at each point in time
-visit.csv: destination
