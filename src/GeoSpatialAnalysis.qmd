@@ -1,0 +1,59 @@
+---
+title: "GeoSpatialDataAnalysis"
+authors: "Chance Bradford, Yuuki Matsunari"
+format: html
+editor: visual
+---
+
+# Geospatial Analysis of Frequent Locations and Movement Patterns
+
+Term project for Cpts 475 Data Science
+
+### Load necessary libraries and Dataset
+
+```{r}
+# Load required libraries
+library(dplyr)
+library(tidyr)
+
+
+locations = read.csv('../data/all_locations.csv', header = TRUE, sep = ",")
+
+head(locations)
+
+```
+
+**extract datetime element from data and create new table variables with extracted data. removed original datetime for extracted date and time data, and the first column 'instance' data.**
+
+```{r}
+
+# Add time components to the existing dataframe
+locations <- locations %>%
+  mutate(
+    datetime_posix = mdy_hm(datetime),
+    date = as.Date(datetime_posix),
+    time = format(datetime_posix, "%H:%M"),
+    hour = hour(datetime_posix),
+    minute = minute(datetime_posix)
+  )
+
+# Reorder columns to put date/time columns after the original datetime
+locations <- locations %>%
+  select(acc, lat, long, date, time, hour, minute)
+
+# Display head of the modified dataframe
+head(locations)
+
+```
+
+### Calculate the total time spent at each key location
+
+```{r}
+
+```
+
+### Identify the top 5 locations where the individual spends the most time each month
+
+```{r}
+
+```
