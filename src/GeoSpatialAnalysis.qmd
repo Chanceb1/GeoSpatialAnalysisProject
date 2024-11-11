@@ -15,6 +15,7 @@ Term project for Cpts 475 Data Science
 # Load required libraries
 library(dplyr)
 library(tidyr)
+library(lubridate)
 
 
 locations = read.csv('../data/all_locations.csv', header = TRUE, sep = ",")
@@ -42,7 +43,38 @@ locations <- locations %>%
   select(acc, lat, long, date, time, hour, minute)
 
 # Display head of the modified dataframe
-head(locations)
+summary(locations)
+
+```
+
+### display points on geo map for all locations
+
+```{r}
+library(ggplot2)
+
+# Basic map plot using ggplot
+geoMap <- ggplot(locations, aes(x = long, y = lat)) +
+  geom_point(size = 5, alpha = 0.2) + 
+  borders("world", colour = "gray50", fill = "white") +
+  coord_quickmap(xlim = c(-125, -104), ylim = c(37, 49)) +
+  ggtitle("Location Data Centered Around WA")
+
+geoMap
+
+```
+### display points on geo map excluding SE WA outlier point 
+
+```{r}
+library(ggplot2)
+
+# Basic map plot using ggplot
+geoMap <- ggplot(locations, aes(x = long, y = lat)) +
+  geom_point(size = 5, alpha = 0.2) + 
+  borders("world", colour = "gray50", fill = "white") +
+  coord_quickmap(xlim = c(-125, -104), ylim = c(37, 49)) +
+  ggtitle("Location Data Centered Around WA")
+
+geoMap
 
 ```
 
