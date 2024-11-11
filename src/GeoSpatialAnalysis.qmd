@@ -25,8 +25,9 @@ head(locations)
 
 **extract datetime element from data and create new table variables with extracted data. removed original datetime for extracted date and time data, and the first column 'instance' data.**
 
-```{r}
+### Make a table with rounding
 
+```{r}
 location_summary <- locations %>%
   mutate(datetime = mdy_hm(datetime),
          date = as.Date(datetime),
@@ -38,6 +39,43 @@ location_summary <- locations %>%
   ungroup()
 
 location_summary
+```
+
+
+### Make a table with DBSCAN
+
+```{r}
+
+library(sf)
+library(dbscan)
+
+# convert to sf
+locations_sf <- locations %>%
+  mutate(datetime = mdy_hm(datetime)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326)
+
+# Run DBSCAN
+clusters <- dbscan(st_coordinates(locations_sf), eps = 0.0005, minPts = 2) # eps = 50m works fine
+
+# Add ID
+locations <- locations %>%
+  mutate(
+    datetime = mdy_hm(datetime),
+    cluster = clusters$cluster
+  )
+
+# Calculating by each cluster
+location_summary <- locations %>%
+  group_by(cluster, month = month(as.Date(datetime))) %>%
+  summarise(
+    lat = mean(lat),
+    long = mean(long),
+    staying_time = sum(as.numeric(difftime(max(datetime), min(datetime), units = "hours")))
+  ) %>%
+  ungroup()
+
+location_summary
+
 
 ```
 
@@ -50,13 +88,28 @@ top_locations <- location_summary %>%
   slice_head(n = 5) %>%
   ungroup()
 
-top_locations
+top_locations_split <- top_locations %>%
+  group_split(month)
 
-# need to work on remove similar place
+top_locations_split
 ```
 
 ### Calculate the total time spent at each key location
 
 ```{r}
+total_time_key <- location_summary %>%
+  arrange(desc(staying_time)) %>%
+  ungroup()
 
+total_time_key
+```
+
+### Calculate the total time spent at each key location (with DBSCAN)
+
+```{r}
+total_time_key <- location_summary %>%
+  arrange(desc(staying_time)) %>%
+  ungroup()
+
+total_time_key
 ```
