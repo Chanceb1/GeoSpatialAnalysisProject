@@ -17,7 +17,6 @@ library(dplyr)
 library(tidyr)
 library(lubridate)
 
-
 locations = read.csv('../data/all_locations.csv', header = TRUE, sep = ",")
 
 head(locations)
@@ -26,25 +25,73 @@ head(locations)
 
 **extract datetime element from data and create new table variables with extracted data. removed original datetime for extracted date and time data, and the first column 'instance' data.**
 
+### Make a table with rounding
+
+```{r}
+location_summary <- locations %>%
+  mutate(datetime = mdy_hm(datetime),
+         date = as.Date(datetime),
+         month = month(date),
+         lat = round(lat, 4),
+         long = round(long, 4)) %>% # probably can change the amount. I used it for avoiding duplication.
+  group_by(lat, long, month) %>%
+  summarise(staying_time = sum(as.numeric(difftime(max(datetime), min(datetime), units = "hours")))) %>%
+  ungroup()
+
+location_summary
+```
+
+
+### Make a table with DBSCAN
+
 ```{r}
 
-# Add time components to the existing dataframe
+library(sf)
+library(dbscan)
+
+# convert to sf
+locations_sf <- locations %>%
+  mutate(datetime = mdy_hm(datetime)) %>%
+  st_as_sf(coords = c("long", "lat"), crs = 4326)
+
+# Run DBSCAN
+clusters <- dbscan(st_coordinates(locations_sf), eps = 0.0005, minPts = 2) # eps = 50m works fine
+
+# Add ID
 locations <- locations %>%
   mutate(
-    datetime_posix = mdy_hm(datetime),
-    date = as.Date(datetime_posix),
-    time = format(datetime_posix, "%H:%M"),
-    hour = hour(datetime_posix),
-    minute = minute(datetime_posix)
+    datetime = mdy_hm(datetime),
+    cluster = clusters$cluster
   )
 
-# Reorder columns to put date/time columns after the original datetime
-locations <- locations %>%
-  select(acc, lat, long, date, time, hour, minute)
+# Calculating by each cluster
+location_summary <- locations %>%
+  group_by(cluster, month = month(as.Date(datetime))) %>%
+  summarise(
+    lat = mean(lat),
+    long = mean(long),
+    staying_time = sum(as.numeric(difftime(max(datetime), min(datetime), units = "hours")))
+  ) %>%
+  ungroup()
 
-# Display head of the modified dataframe
-summary(locations)
+location_summary
 
+
+```
+
+### Identify the top 5 locations where the individual spends the most time each month
+
+```{r}
+top_locations <- location_summary %>%
+  group_by(month) %>%
+  arrange(desc(staying_time)) %>%
+  slice_head(n = 5) %>%
+  ungroup()
+
+top_locations_split <- top_locations %>%
+  group_split(month)
+
+top_locations_split
 ```
 
 ### display points on geo map for all locations
@@ -81,11 +128,19 @@ geoMap
 ### Calculate the total time spent at each key location
 
 ```{r}
+total_time_key <- location_summary %>%
+  arrange(desc(staying_time)) %>%
+  ungroup()
 
+total_time_key
 ```
 
-### Identify the top 5 locations where the individual spends the most time each month
+### Calculate the total time spent at each key location (with DBSCAN)
 
 ```{r}
+total_time_key <- location_summary %>%
+  arrange(desc(staying_time)) %>%
+  ungroup()
 
+total_time_key
 ```
