@@ -39,58 +39,7 @@ head(locations)
 
 ```
 
-### print summary statistics and plot the data
-
-```{r}
-library(ggplot2)
-library(maps)
-
-# print summary statistics
-summary(locations)
-
-
-# time series plot
-# now plot avereage line fit on the scatter plot
-
-# ggplot(locations, aes(x = date, y = acc)) +
-#   geom_point() +
-#   geom_smooth(method = "lm", se = FALSE) +
-#   labs(title = "Time Series of Accuracy", x = "Date", y = "Accuracy") +
-#   theme_minimal()
-
-
-# heat map plot
-
-# Get the coordinate limits from the data
-# lat_range <- range(locations$lat, na.rm = TRUE)
-# long_range <- range(locations$long, na.rm = TRUE)
-# 
-# # Heatmap Plot with World Map Overlay and Coordinate Limits
-# ggplot(locations, aes(x = long, y = lat)) +
-#   borders("world", colour = "gray30", fill = "grey80") +  # Overlay world map
-#   stat_density_2d(aes(fill = ..level..), geom = "polygon", alpha = 0.6) +  # Semi-transparent density overlay
-#   scale_fill_viridis_c() +
-#   coord_cartesian(xlim = long_range, ylim = lat_range) +  # Set coordinate limits
-#   labs(title = "Spatial Density of Records with World Map", x = "Longitude", y = "Latitude") +
-#   theme_minimal()
-
-# Faceted Plot (optional: to visualize data over time by month)
-# Extract month and year for faceting
-# locations$month <- month(locations$date, label = TRUE)
-# 
-# ggplot(locations, aes(x = long, y = lat)) +
-#   stat_density_2d(aes(fill = ..level..), geom = "polygon") +
-#   scale_fill_viridis_c() +
-#   labs(title = "Spatial Density by Month", x = "Longitude", y = "Latitude") +
-#   theme_minimal() +
-#   facet_wrap(~ month)
-
-
-```
-
-**extract datetime element from data and create new table variables with extracted data. removed original datetime for extracted date and time data, and the first column 'instance' data.**
-
-### display points on geo map for all locations
+### Display points on geo map for all locations
 
 ```{r}
 library(ggplot2)
@@ -109,23 +58,6 @@ geoMap <- ggplot(locations, aes(x = long, y = lat)) +
 
 geoMap
 
-```
-
-
-### Make a table with rounding
-
-```{r}
-# location_summary <- locations %>%
-#   mutate(datetime = mdy_hm(datetime),
-#          date = as.Date(datetime),
-#          month = month(date),
-#          lat = round(lat, 4),
-#          long = round(long, 4)) %>% # probably can change the amount. I used it for avoiding duplication.
-#   group_by(lat, long, month) %>%
-#   summarise(staying_time = sum(as.numeric(difftime(max(datetime), min(datetime), units = "hours")))) %>%
-#   ungroup()
-# 
-# location_summary
 ```
 
 ### Make a table with DBSCAN
@@ -150,8 +82,33 @@ locations <- locations %>%
   )
 
 
+# Sort by date and time to analyze transitions
+locations <- locations %>%
+  arrange(date, time) %>%
+  mutate(
+    prev_cluster = lag(cluster),
+    movement = ifelse(prev_cluster != cluster & !is.na(prev_cluster), 
+                      paste(prev_cluster, "->", cluster), NA)
+  )
+
+# Summarize transitions
+transition_summary <- locations %>%
+  filter(!is.na(movement)) %>%
+  group_by(movement) %>%
+  summarise(
+    count = n(),
+    avg_time = mean(as.numeric(
+      difftime(
+        as.POSIXct(paste(date, time)), 
+        lag(as.POSIXct(paste(date, time))), 
+        units = "mins"
+      )
+    ), na.rm = TRUE)
+  )
+
 # Calculate summary statistics by cluster
 location_summary <- locations %>%
+  filter(cluster != 0) %>% # filtering noise (ID = 0)
   mutate(month = month(as.Date(date))) %>%
   group_by(cluster, month) %>%
   summarise(
@@ -183,21 +140,15 @@ plot(locations_sf, col = clusters$cluster + 1, pch = 19, cex = 0.5, main="DBSCAN
 
 ```
 
-
 ### Identify the top 5 locations where the individual spends the most time each month
 
 ```{r}
 
 top_locations <- location_summary %>%
-  # Filter out noise points (cluster = 0)
-  filter(cluster != 0) %>%
   group_by(month) %>%
   arrange(desc(staying_time), .by_group = TRUE) %>%
   slice_head(n = 5) %>%
   ungroup()
-
-# top_locations_split <- top_locations %>%
-#   group_split(month)
 
 top5_locations_per_month <- split(top_locations, top_locations$month)
 
@@ -206,11 +157,13 @@ top5_locations_per_month
 
 ```
 
-### Plot the top 5 locations where the individual spends the most time each month
+### Plot the top 5 locations where the individual spends the most time each month, calculate the total time spent, and mapping the typical movement sequence between these frequent locations
 
 ```{r}
 
-library(patchwork)  # For arranging multiple plots
+library(ggplot2)
+library(patchwork)
+library(stringr)
 
 # Create a list to store all plots
 plot_list <- list()
@@ -219,34 +172,52 @@ plot_list <- list()
 for (i in seq_along(top5_locations_per_month)) {
   top5_locations <- top5_locations_per_month[[i]]
   
-  # Calculate buffer for zoom (20% of the range)
-  long_buffer <- (max(top5_locations$long) - min(top5_locations$long)) * 1.2
-  lat_buffer <- (max(top5_locations$lat) - min(top5_locations$lat)) * 1.2
+  # Calculate buffer for zoom
+  long_buffer <- (max(top5_locations$long) - min(top5_locations$long)) * 0.3
+  lat_buffer <- (max(top5_locations$lat) - min(top5_locations$lat)) * 0.3
+  
+  # Extract relevant transitions for this month
+  transitions <- transition_summary %>%
+    filter(as.numeric(str_extract(movement, "\\d+")) %in% unique(top5_locations$cluster))
+  
+  # Merge to get start and end coordinates for arrows
+  transitions <- transitions %>%
+    separate(movement, into = c("start_cluster", "end_cluster"), sep = "->", convert = TRUE) %>%
+    left_join(top5_locations, by = c("start_cluster" = "cluster")) %>%
+    rename(start_long = long, start_lat = lat) %>%
+    left_join(top5_locations, by = c("end_cluster" = "cluster")) %>%
+    rename(end_long = long, end_lat = lat)
   
   # Create the plot
   p <- ggplot() +
     # Add world map background
     borders("world", colour = "gray50", fill = "gray95") +
-    # Add points
+    # Add points for top 5 locations
     geom_point(data = top5_locations, 
                aes(x = long, y = lat, 
                    size = staying_time,
                    color = factor(cluster))) +
-    # Add labels
+
     geom_text(data = top5_locations,
               aes(x = long, y = lat,
                   label = sprintf("%.1f mins", staying_time)),
               vjust = -1, hjust = -0.2, size = 3) +
-    # Customize scales
+
+    geom_segment(data = transitions, 
+                 aes(x = start_long, y = start_lat, 
+                     xend = end_long, yend = end_lat),
+                 arrow = arrow(length = unit(0.2, "cm")),
+                 color = "blue", size = 0.8) +
+
     scale_size_continuous(range = c(3, 10),
                          name = "Staying Time (mins)") +
     scale_color_viridis_d(name = "Cluster") +
-    # Add titles and theme
+
     labs(title = paste("Month", i),
          x = "Longitude", 
          y = "Latitude") +
     theme_minimal() +
-    # Focus map on points
+
     coord_quickmap(
       xlim = c(min(top5_locations$long) - long_buffer, 
                max(top5_locations$long) + long_buffer),
@@ -263,22 +234,10 @@ for (i in seq_along(top5_locations_per_month)) {
   plot_list[[i]] <- p
 }
 
-
 # Print individual plots one by one
 for (p in plot_list) {
   print(p)
 }
 
 
-```
-
-
-### Calculate the total time spent at each key location (with DBSCAN)
-
-```{r}
-total_time_key <- location_summary %>%
-  arrange(desc(staying_time)) %>%
-  ungroup()
-
-total_time_key
 ```
