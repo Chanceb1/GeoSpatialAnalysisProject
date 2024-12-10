@@ -17,6 +17,7 @@ library(dplyr)
 library(tidyr)
 library(lubridate)
 
+# load initial data set
 locations = read.csv('../data/all_locations.csv', header = TRUE, sep = ",")
 
 head(locations)
@@ -39,26 +40,91 @@ head(locations)
 
 ```
 
-### Display points on geo map for all locations
+# Exploratory Data analysis
+
+### print summary statistics of the data
+
+```{r}
+
+# print summary statistics
+summary(locations)
+
+
+```
+
+### (GeoSpatial Plot) Display points on geo map for all locations with accuracy measure heatmap
 
 ```{r}
 library(ggplot2)
+library(maps)
+library(viridis)
 
-# Get the coordinate limits from the data
-lat_range <- range(locations$lat, na.rm = TRUE)
-long_range <- range(locations$long, na.rm = TRUE)
+# Manually set latitude and longitude ranges
+min_longitude <- -125.0   
+max_longitude <- -116.0  
+min_latitude <- 37.5    
+max_latitude <- 49.0
 
-# Basic map plot using ggplot2
-# w/coordinates based on max vals of data lat and long
-geoMap <- ggplot(locations, aes(x = long, y = lat)) +
-  geom_point(size = 5, alpha = 0.25) + 
-  borders("world", colour = "gray30", fill = "grey") +
-  coord_cartesian(xlim = long_range, ylim = lat_range) +
-  ggtitle("Total visited Locations")
+# Improved Geospatial Plot
+geomap <- ggplot(locations, aes(x = long, y = lat)) +
+  borders("world", 
+          colour = "gray50", 
+          fill = "gray90") +
+  
+  # Add data points
+  geom_point(
+    aes(color = acc),  # Color points by accuracy
+    size = 3, 
+    alpha = 0.6, 
+    shape = 16  
+  ) +
+  
+  # color scale for continuous data
+  scale_color_viridis_c(
+    name = "Accuracy",
+    option = "plasma",
+    alpha = 0.7
+  ) +
+  
+  # Use fixed coordinate system with explicit limits
+  coord_fixed(
+    xlim = c(min_longitude, max_longitude),
+    ylim = c(min_latitude, max_latitude),
+    # ratio = 1.3  # Adjust for proper aspect ratio
+  ) +
+  
+  # Enhance theme
+  theme_minimal() +
+  theme(
+    panel.background = element_rect(fill = "aliceblue"),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.position = "right"
+  ) +
+  
+  # Add labels
+  labs(
+    title = "Total Locations",
+    x = "Longitude",
+    y = "Latitude",
+    caption = paste("Total unique locations:", nrow(locations))
+  )
 
-geoMap
+# Display the improved map
+print(geomap)
 
+# Create a summary of geographical spread
+location_summary <- locations %>%
+  summarise(
+    total_locations = n(),
+    min_latitude = min(lat, na.rm = TRUE),
+    max_latitude = max(lat, na.rm = TRUE),
+    min_longitude = min(long, na.rm = TRUE),
+    max_longitude = max(long, na.rm = TRUE)
+  )
+
+print(location_summary)
 ```
+# clustering Data points
 
 ### Make a table with DBSCAN
 

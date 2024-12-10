@@ -2,9 +2,10 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=r
 
 ### R ###
-# History files
+# History filesz
 .Rhistory
 .Rapp.history
+/src/.Rhistory
 
 # Session Data files
 .RData
